@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- ZXing Scanner -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+
+  <title>Stock Entry — Dark Mode</title>
+
+  <style>
+    /* ---------- Base / Dark Theme ---------- */
+    :root{
+      --bg:#0b0f14;
+      --card:#0f1620;
+      --muted:#9aa6b2;
+      --accent:#39a7ff; /* neon blue */
+      --accent-2:#66d0ff;
+      --glass: rgba(255,255,255,0.03);
+      --success:#2ecc71;
+      --danger:#ff6b6b;
+      --shadow: 0 8px 24px rgba(2,6,23,0.6);
+      --radius:12px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#06080a 0%, #071021 100%);
+      color:#e6eef6;
+      font-family: Inter, system-ui, Arial, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      padding:20px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      overflow:auto;
+      animation:fadeIn 450ms ease both;
+    }
+
+    @keyframes fadeIn {
+      from{opacity:0; transform: translateY(8px)}
+      to{opacity:1; transform: translateY(0)}
+    }
+
+    /* ---------- Card ---------- */
+    .card{
+      width:100%;
+      max-width:640px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border-radius:var(--radius);
+      padding:20px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(255,255,255,0.03);
+      backdrop-filter: blur(6px);
+    }
+
+    .header{
+      display:flex; align-items:center; gap:12px; margin-bottom:8px;
+    }
+    .logo{
+      width:48px; height:48px; border-radius:10px;
+      background: linear-gradient(135deg,var(--accent),var(--accent-2));
+      display:flex; align-items:center; justify-content:center;
+      font-weight:700; color:#021; box-shadow:0 6px 18px rgba(57,167,255,0.12);
+    }
+    h1{font-size:20px; margin:0; letter-spacing:0.2px}
+    p.subtitle{margin:0;color:var(--muted);font-size:13px;margin-top:2px}
+
+    /* ---------- Form layout ---------- */
+    form{display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:16px}
+    .full{grid-column:1 / -1}
+    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px}
+    input[type="text"], input[type="date"], input[type="number"], select {
+      width:100%;
+      padding:12px 14px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,0.04);
+      background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      color:var(--accent-2);
+      outline: none;
+      font-size:15px;
+      transition: box-shadow .18s ease, transform .08s ease, border-color .12s ease;
+      box-shadow: inset 0 -8px 24px rgba(0,0,0,0.35);
+    }
+
+    /* focus glow */
+    input:focus, select:focus {
+      border-color: rgba(57,167,255,0.95);
+      box-shadow: 0 6px 26px rgba(57,167,255,0.08), 0 0 0 6px rgba(57,167,255,0.05);
+      color: #eaf8ff;
+      transform: translateY(-1px);
+    }
+
+    /* readonly fields style */
+    input[readonly]{
+      color:var(--muted);
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+      opacity:0.95;
+    }
+
+    /* ---------- Scanner video ---------- */
+    #scanner {
+      width:100%;
+      border-radius:10px;
+      overflow:hidden;
+      display:none;
+      grid-column: 1 / -1;
+      margin-top:6px;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    /* ---------- Buttons ---------- */
+    .btn {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:12px 14px;
+      font-weight:600;
+      cursor:pointer;
+      border-radius:10px;
+      border:none;
+      color:#021;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      box-shadow: 0 8px 30px rgba(57,167,255,0.12);
+      transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+      width:100%;
+      font-size:15px;
+    }
+    .btn:active { transform: translateY(1px) scale(.998) }
+    .btn.alt {
+      background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+      color:var(--accent-2);
+      border:1px solid rgba(255,255,255,0.03);
+      box-shadow: none;
+    }
+    .btn.scan {
+      position:relative;
+      overflow:visible;
+    }
+    .btn.scan::after{
+      content:'';
+      position:absolute; right:12px; top:12px;
+      width:8px; height:8px; border-radius:50%;
+      background: rgba(255,255,255,0.12);
+      box-shadow: 0 0 16px rgba(57,167,255,0.12);
+      transition: transform .3s ease, opacity .3s ease;
+    }
+    .btn.scan:hover::after{ transform: scale(1.15); opacity:0.95 }
+
+    /* small helpers */
+    .muted{color:var(--muted); font-size:13px; margin-top:6px}
+    .actions{ grid-column: 1 / -1; display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:6px}
+
+    /* responsive */
+    @media (max-width:720px){
+      form{grid-template-columns:1fr}
+      .actions{grid-template-columns:1fr}
+    }
+
+    /* loading micro animation */
+    .pulse {
+      display:inline-block;
+      width:10px; height:10px; border-radius:50%;
+      background:var(--accent-2);
+      box-shadow: 0 0 0 rgba(102,208,255,0.4);
+      animation: ping 1.4s infinite;
+    }
+    @keyframes ping {
+      0%{ transform:scale(0.9); opacity:0.9;}
+      70%{ transform:scale(1.8); opacity:0;}
+      100%{ transform:scale(0.9); opacity:0;}
+    }
+
+    /* success toast */
+    .toast {
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:26px; padding:12px 18px; border-radius:10px;
+      background: rgba(9,30,13,0.9); color: #dff6e9; border:1px solid rgba(47,195,117,0.12);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.4); font-weight:600;
+      opacity:0; pointer-events:none; transition:opacity .2s ease, transform .25s ease;
+    }
+    .toast.show{ opacity:1; transform: translate(-50%, -6px) }
+
+  </style>
+</head>
+<body>
+
+  <div class="card" role="main" aria-labelledby="title">
+    <div class="header">
+      <div class="logo">S</div>
+      <div>
+        <h1 id="title">Stock Entry</h1>
+        <p class="subtitle">Scan → Auto-fill → Submit — Dark mode</p>
+      </div>
+    </div>
+
+    <form id="entryForm" autocomplete="off">
+      <!-- BARCODE -->
+      <div class="full">
+        <label for="barcode">Barcode</label>
+        <input id="barcode" name="barcode" type="text" placeholder="Scan or type barcode" autofocus
+               oninput="onBarcodeInput()" />
+      </div>
+
+      <!-- Scan / Video -->
+      <div class="full" style="display:flex; gap:10px; align-items:center;">
+        <button type="button" class="btn scan" id="scanBtn" onclick="startScanner()" title="Open camera to scan">
+          📷 Scan Barcode
+        </button>
+
+        <button type="button" class="btn alt" id="stopBtn" onclick="stopScanner()" style="display:none">
+          ✖ Close Scanner
+        </button>
+      </div>
+
+      <video id="scanner" playsinline></video>
+
+      <!-- Auto-filled -->
+      <div class="full">
+        <label for="name">Item Name</label>
+        <input id="name" name="name" type="text" readonly />
+      </div>
+
+      <div>
+        <label for="category">Category</label>
+        <input id="category" name="category" type="text" readonly />
+      </div>
+
+      <!-- PO Date and PO No -->
+      <div>
+        <label for="podate">PO Date</label>
+        <input id="podate" name="podate" type="date" />
+      </div>
+
+      <div>
+        <label for="pono">PO No</label>
+        <input id="pono" name="pono" type="text" />
+      </div>
+
+      <!-- Invoice Date / No -->
+      <div>
+        <label for="invdate">Invoice Date</label>
+        <input id="invdate" name="invdate" type="date" />
+      </div>
+
+      <div>
+        <label for="invno">Invoice No</label>
+        <input id="invno" name="invno" type="text" />
+      </div>
+
+      <!-- Store Issue Date / Unit -->
+      <div>
+        <label for="issuedate">Store Issue Date</label>
+        <input id="issuedate" name="issuedate" type="date" />
+      </div>
+
+      <div>
+        <label for="unit">Unit</label>
+        <select id="unit" name="unit">
+          <option value="">Select Unit</option>
+          <option value="Nos">Nos</option>
+          <option value="Kg">Kg</option>
+          <option value="Gm">Gm</option>
+          <option value="Litre">Litre</option>
+          <option value="Ml">Ml</option>
+          <option value="Box">Box</option>
+          <option value="Pkt">Pkt</option>
+          <option value="Bag">Bag</option>
+          <option value="Set">Set</option>
+          <option value="Pair">Pair</option>
+          <option value="Bundle">Bundle</option>
+          <option value="Meter">Meter</option>
+          <option value="Piece">Piece</option>
+        </select>
+      </div>
+
+      <!-- Qty -->
+      <div class="full">
+        <label for="qty">Quantity</label>
+        <input id="qty" name="qty" type="number" min="0" step="1" />
+      </div>
+
+      <!-- Actions -->
+      <div class="actions full" style="margin-top:6px">
+        <button type="button" class="btn" id="submitBtn" onclick="submitForm()" aria-label="Submit entry">
+          ➕ Submit Entry
+        </button>
+
+        <button type="button" class="btn alt" id="clearBtn" onclick="clearForm()" aria-label="Clear form">
+          ♻ Clear
+        </button>
+      </div>
+
+      <p class="muted full" style="margin-top:12px">Tip: Use the Scan button for mobile camera scanning. After successful submit the form clears automatically.</p>
+    </form>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ===================== ZXing + Scanner Handling ===================== */
+let codeReader = null;
+let currentDeviceId = null;
+const scannerVideo = document.getElementById('scanner');
+const scanBtn = document.getElementById('scanBtn');
+const stopBtn = document.getElementById('stopBtn');
+
+function startScanner(){
+  // show video
+  scannerVideo.style.display = 'block';
+  scanBtn.style.display = 'none';
+  stopBtn.style.display = 'inline-flex';
+
+  codeReader = new ZXing.BrowserMultiFormatReader();
+
+  codeReader.listVideoInputDevices()
+    .then((videoInputDevices) => {
+      // choose rear camera if available
+      let device = videoInputDevices.find(d => /back|rear|environment/i.test(d.label)) || videoInputDevices[0];
+      currentDeviceId = device.deviceId;
+
+      // start decode
+      codeReader.decodeFromVideoDevice(currentDeviceId, scannerVideo, (result, err) => {
+        if (result) {
+          // set value, stop scanner, fetch and focus PO Date
+          document.getElementById('barcode').value = result.text;
+          stopScanner();
+          setTimeout(() => { fetchItem(); }, 200);
+          setTimeout(() => { focusPODate(); }, 420);
+        }
+        // else ignore errors silently (camera permissions etc.)
+      });
+    })
+    .catch(err=>{
+      console.error('Scanner error', err);
+      showToast('Camera not available or permission denied', true);
+      stopScanner();
+    });
+}
+
+function stopScanner(){
+  try{
+    if (codeReader) codeReader.reset();
+  }catch(e){
+    // ignore
+  }
+  scannerVideo.style.display = 'none';
+  scanBtn.style.display = 'inline-flex';
+  stopBtn.style.display = 'none';
+}
+
+/* ===================== Auto Fetch ===================== */
+function onBarcodeInput(){
+  // small delay to avoid too many calls
+  if (this._barcodeTimer) clearTimeout(this._barcodeTimer);
+  const val = document.getElementById('barcode').value;
+  this._barcodeTimer = setTimeout(()=> {
+    if (val && val.trim().length > 2) fetchItem();
+  }, 300);
+}
+
+function fetchItem(){
+  const barcode = document.getElementById('barcode').value.trim();
+  if (!barcode) return;
+
+  // call server-side getItemDetails(barcode)
+  google.script.run.withSuccessHandler(function(data){
+    if (data){
+      document.getElementById('name').value = data.name || '';
+      document.getElementById('category').value = data.category || '';
+    } else {
+      document.getElementById('name').value = '';
+      document.getElementById('category').value = '';
+      // don't spam alerts on mobile, show subtle toast
+      showToast('Item not found in master sheet', true);
+    }
+  }).getItemDetails(barcode);
+}
+
+/* ===================== Focus helpers ===================== */
+function focusBarcode(){
+  const el = document.getElementById('barcode');
+  el.focus();
+  // make cursor blink on mobile/desktop
+  if (typeof el.select === 'function') {
+    el.select();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
+
+function focusPODate(){
+  const el = document.getElementById('podate');
+  el.focus();
+}
+
+/* ===================== Submit / Clear ===================== */
+function submitForm(){
+  const obj = {
+    barcode: document.getElementById('barcode').value.trim(),
+    name: document.getElementById('name').value.trim(),
+    category: document.getElementById('category').value.trim(),
+    podate: document.getElementById('podate').value,
+    pono: document.getElementById('pono').value.trim(),
+    invdate: document.getElementById('invdate').value,
+    invno: document.getElementById('invno').value.trim(),
+    issuedate: document.getElementById('issuedate').value,
+    unit: document.getElementById('unit').value,
+    qty: document.getElementById('qty').value
+  };
+
+  // basic validation
+  if (!obj.barcode || !obj.name) {
+    showToast('Please scan or enter Barcode and ensure Item Name is populated', true);
+    focusBarcode();
+    return;
+  }
+  if (!obj.qty) {
+    showToast('Please enter quantity', true);
+    document.getElementById('qty').focus();
+    return;
+  }
+
+  // disable submit while saving
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+  submitBtn.style.opacity = '0.7';
+  submitBtn.textContent = 'Saving...';
+
+  google.script.run.withSuccessHandler(function(msg){
+    showToast(msg || 'Saved', false);
+    clearForm();
+    // focus back to barcode after clear
+    setTimeout(focusBarcode, 220);
+    submitBtn.disabled = false;
+    submitBtn.style.opacity = '1';
+    submitBtn.innerHTML = '➕ Submit Entry';
+  }).withFailureHandler(function(err){
+    showToast('Save failed', true);
+    console.error('Save error', err);
+    submitBtn.disabled = false;
+    submitBtn.style.opacity = '1';
+    submitBtn.innerHTML = '➕ Submit Entry';
+  }).saveData(obj);
+}
+
+function clearForm(){
+  // reset fields but keep unit default
+  document.getElementById('barcode').value = '';
+  document.getElementById('name').value = '';
+  document.getElementById('category').value = '';
+  document.getElementById('podate').value = '';
+  document.getElementById('pono').value = '';
+  document.getElementById('invdate').value = '';
+  document.getElementById('invno').value = '';
+  document.getElementById('issuedate').value = '';
+  document.getElementById('unit').value = '';
+  document.getElementById('qty').value = '';
+}
+
+/* ===================== Toast helper ===================== */
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function showToast(message, isError){
+  toastEl.textContent = message;
+  toastEl.style.background = isError ? 'rgba(40,10,10,0.92)' : 'rgba(6,30,12,0.94)';
+  toastEl.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> {
+    toastEl.classList.remove('show');
+  }, 2600);
+}
+
+/* ===================== Init on load ===================== */
+window.addEventListener('load', ()=> {
+  // give a moment and focus barcode
+  setTimeout(()=> { focusBarcode(); }, 180);
+});
+</script>
+
+</body>
+</html>
