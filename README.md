@@ -1,0 +1,2 @@
+# inventory
+for stock manage
